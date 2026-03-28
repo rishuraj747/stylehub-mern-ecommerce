@@ -7,6 +7,7 @@ import { assets } from '../assets/assets';
 
 const Orders = ({ token }) => {
   const [orders, setOrders] = useState([]);
+  const [filterDate, setFilterDate] = useState('');
 
   const fetchAllOrders = useCallback(async () => {
     if (!token) return;
@@ -19,7 +20,7 @@ const Orders = ({ token }) => {
         { headers: { token } }
       );
       if (response.data.success) {
-        setOrders(response.data.orders.reverse());
+        setOrders(response.data.orders);
       } else {
         toast.error(response.data.message);
       }
@@ -62,11 +63,38 @@ const Orders = ({ token }) => {
     fetchAllOrders();
   }, [fetchAllOrders]);
 
+  const displayedOrders = [...orders]
+    .filter((order) => {
+      if (!filterDate) return true;
+      const orderDate = new Date(order.date).toLocaleDateString('en-CA'); // Gets YYYY-MM-DD format in local timezone
+      return orderDate === filterDate;
+    })
+    .sort((a, b) => new Date(b.date) - new Date(a.date)); // Default fallback sort
+
   return (
     <div>
-      <h3>Order Page</h3>
+      <div className="flex flex-col sm:flex-row justify-between items-center mb-4 mt-2 gap-4">
+        <h3 className="text-xl font-medium">Order Page</h3>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-600">Filter by Date:</span>
+          <input 
+            type="date" 
+            value={filterDate} 
+            onChange={(e) => setFilterDate(e.target.value)} 
+            className="p-2 border border-gray-300 font-medium text-sm rounded outline-none"
+          />
+          {filterDate && (
+            <button 
+              onClick={() => setFilterDate('')}
+              className="px-3 py-2 bg-gray-100 border border-gray-300 rounded text-sm hover:bg-gray-200"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
       <div>
-        {orders.map((order, index) => (
+        {displayedOrders.map((order, index) => (
           <div
             key={index}
             className="grid grid-cols-1 sm:grid-cols-[0.5fr_2fr_1fr] lg:grid-cols-[0.5fr_2fr_1fr_1fr_1fr] gap-3 items-start border-2 border-gray-300 p-5 md:p-8 my-3 md:my-4 text-xs sm:text-sm text-gray-700"

@@ -42,7 +42,7 @@ products.map((item)=>{
         </div>
         <div className='flex-1'>
           <h1 className='font-medium text-2xl mt-2  '>
-            {productData.name}
+            {productData.name.replace(/"+$/, "")}
           </h1>
           <div className='flex items-center gap-1 mt-2 '>
             <img src={

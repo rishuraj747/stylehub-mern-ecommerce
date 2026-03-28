@@ -1,6 +1,8 @@
 import orderModel from '../models/orderModel.js'
 import userModel from '../models/userModel.js'
+import invoiceModel from '../models/invoiceModel.js'
 import Stripe from 'stripe'
+import axios from "axios";
 
 //global variables
 const currency = 'inr'
@@ -8,6 +10,7 @@ const deliveryCharges = 10
 
 //gateway initialize
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+const backendUrl = process.env.BACKEND_URL 
 
 //Placing order using COD method
 
@@ -27,6 +30,17 @@ const placOrder = async (req,res)=>{
         await newOrder.save()
 
         await userModel.findByIdAndUpdate(userId, {cartData: {}})
+
+        const invoice = new invoiceModel({
+            user: userId,
+            order: newOrder._id,
+            items: items,
+            totalAmount: amount,
+            paymentMethod: "COD",
+            address: address,
+            invoiceNumber: "INV-" + Date.now(),
+        });
+        await invoice.save();
 
         res.json({success: true, message: "Order Placed"})
     }
@@ -85,6 +99,17 @@ const placOrderStripe = async (req,res)=>{
             mode: 'payment',
         })
 
+        const invoice = new invoiceModel({
+            user: userId,
+            order: newOrder._id,
+            items: items,
+            totalAmount: amount,
+            paymentMethod: "Stripe",
+            address: address,
+            invoiceNumber: "INV-" + Date.now(),
+        });
+        await invoice.save();
+
         res.json({success:true,session_url:session.url})
 
     } catch (error) {
@@ -104,6 +129,7 @@ const verifyStripe = async (req,res) => {
             res.json({success: true});
         } else {
             await orderModel.findByIdAndDelete(orderId);
+            await invoiceModel.findOneAndDelete({order: orderId});
             res.json({success: false});
         }
     } catch (error) {
