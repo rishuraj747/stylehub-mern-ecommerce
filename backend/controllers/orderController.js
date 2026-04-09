@@ -3,6 +3,7 @@ import userModel from '../models/userModel.js'
 import invoiceModel from '../models/invoiceModel.js'
 import Stripe from 'stripe'
 import axios from "axios";
+import nodemailer from 'nodemailer';
 
 //global variables
 const currency = 'inr'
@@ -11,6 +12,61 @@ const deliveryCharges = 10
 //gateway initialize
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 const backendUrl = process.env.BACKEND_URL 
+
+const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: process.env.SMTP_PORT || 587,
+    secure: false, // true for 465, false for other ports
+    auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+    }
+});
+
+const sendOrderConfirmationEmail = async (email, orderDetails, address) => {
+    try {
+        const mailOptions = {
+            from: process.env.SMTP_USER,
+            to: email,
+            subject: 'Order Confirmation - StyleHUB',
+            html: `
+                <h2>Thank you for your order!</h2>
+                <p>Hi ${address.firstName} ${address.lastName},</p>
+                <p>Your order has been successfully placed. Here are your order details:</p>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr>
+                            <th style="border: 1px solid #ddd; padding: 8px;">Product</th>
+                            <th style="border: 1px solid #ddd; padding: 8px;">Size</th>
+                            <th style="border: 1px solid #ddd; padding: 8px;">Quantity</th>
+                            <th style="border: 1px solid #ddd; padding: 8px;">Price</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${orderDetails.items.map(item => `
+                            <tr>
+                                <td style="border: 1px solid #ddd; padding: 8px;">${item.name}</td>
+                                <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${item.size || ''}</td>
+                                <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${item.quantity}</td>
+                                <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${item.price}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                <p><strong>Total Amount: </strong> ${orderDetails.amount}</p>
+                <p><strong>Shipping Address:</strong></p>
+                <p>${address.street}, ${address.city}, ${address.state}, ${address.zipcode}, ${address.country}</p>
+                <p>Thank you for shopping with us!</p>
+                <p>StyleHUB Team</p>
+            `
+        };
+
+        await transporter.sendMail(mailOptions);
+        console.log('Order confirmation email sent to', email);
+    } catch (error) {
+        console.error('Error sending email:', error);
+    }
+};
 
 //Placing order using COD method
 
@@ -41,6 +97,8 @@ const placOrder = async (req,res)=>{
             invoiceNumber: "INV-" + Date.now(),
         });
         await invoice.save();
+
+        await sendOrderConfirmationEmail(address.email, { items, amount }, address);
 
         res.json({success: true, message: "Order Placed"})
     }
@@ -126,6 +184,10 @@ const verifyStripe = async (req,res) => {
         if (success === "true") {
             await orderModel.findByIdAndUpdate(orderId, {payment: true});
             await userModel.findByIdAndUpdate(userId, {cartData: {}});
+            
+            const confirmedOrder = await orderModel.findById(orderId);
+            await sendOrderConfirmationEmail(confirmedOrder.address.email, confirmedOrder, confirmedOrder.address);
+
             res.json({success: true});
         } else {
             await orderModel.findByIdAndDelete(orderId);
